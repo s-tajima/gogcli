@@ -45,6 +45,7 @@ func newContactsDirectoryListCmd(flags *rootFlags) *cobra.Command {
 			}
 
 			resp, err := svc.People.ListDirectoryPeople().
+				Sources("DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE").
 				ReadMask(directoryReadMask).
 				PageSize(max).
 				PageToken(page).
@@ -129,6 +130,7 @@ func newContactsDirectorySearchCmd(flags *rootFlags) *cobra.Command {
 
 			resp, err := svc.People.SearchDirectoryPeople().
 				Query(query).
+				Sources("DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE").
 				ReadMask(directoryReadMask).
 				PageSize(max).
 				PageToken(page).
