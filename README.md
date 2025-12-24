@@ -2,12 +2,12 @@
 
 Minimal Google CLI in Go for:
 
-- Gmail
-- Calendar
-- Drive
-- Contacts (People API)
-- Tasks
-- People (profile / `people/me`)
+- Gmail — search, threads/messages, labels, attachments, send + drafts (plain + HTML)
+- Calendar — list/create/update/delete events, respond to invites, freebusy, ACL
+- Drive — list/search/get, download/upload, move/rename/delete, share/permissions, URLs
+- Contacts (People API) — list/search/get/create/update/delete, other contacts, Workspace directory
+- Tasks — tasklists + tasks: lists/create/add/update/done/undo/delete/clear
+- People — profile card (`people/me`)
 
 ## Install / Build
 
