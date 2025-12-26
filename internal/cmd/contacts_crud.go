@@ -259,8 +259,8 @@ func newContactsUpdateCmd(flags *rootFlags) *cobra.Command {
 				return usage("resourceName must start with people/")
 			}
 
-			if err := confirmDestructive(cmd, flags, fmt.Sprintf("delete contact %s", resourceName)); err != nil {
-				return err
+			if confirmErr := confirmDestructive(cmd, flags, fmt.Sprintf("delete contact %s", resourceName)); confirmErr != nil {
+				return confirmErr
 			}
 
 			svc, err := newPeopleContactsService(cmd.Context(), account)

@@ -195,8 +195,8 @@ func newGmailWatchStopCmd(flags *rootFlags) *cobra.Command {
 				return err
 			}
 
-			if err := confirmDestructive(cmd, flags, "stop gmail watch and clear stored state"); err != nil {
-				return err
+			if confirmErr := confirmDestructive(cmd, flags, "stop gmail watch and clear stored state"); confirmErr != nil {
+				return confirmErr
 			}
 
 			svc, err := newGmailService(cmd.Context(), account)

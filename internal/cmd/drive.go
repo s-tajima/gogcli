@@ -226,8 +226,8 @@ func newDriveGetCmd(flags *rootFlags) *cobra.Command {
 			}
 			fileID := args[0]
 
-			if err := confirmDestructive(cmd, flags, fmt.Sprintf("delete drive file %s", fileID)); err != nil {
-				return err
+			if confirmErr := confirmDestructive(cmd, flags, fmt.Sprintf("delete drive file %s", fileID)); confirmErr != nil {
+				return confirmErr
 			}
 
 			svc, err := newDriveService(cmd.Context(), account)
@@ -663,8 +663,8 @@ func newDriveUnshareCmd(flags *rootFlags) *cobra.Command {
 			fileID := args[0]
 			permissionID := args[1]
 
-			if err := confirmDestructive(cmd, flags, fmt.Sprintf("remove permission %s from drive file %s", permissionID, fileID)); err != nil {
-				return err
+			if confirmErr := confirmDestructive(cmd, flags, fmt.Sprintf("remove permission %s from drive file %s", permissionID, fileID)); confirmErr != nil {
+				return confirmErr
 			}
 
 			svc, err := newDriveService(cmd.Context(), account)

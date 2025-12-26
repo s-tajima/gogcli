@@ -308,8 +308,8 @@ func newTasksDoneCmd(flags *rootFlags) *cobra.Command {
 				return usage("empty taskId")
 			}
 
-			if err := confirmDestructive(cmd, flags, fmt.Sprintf("delete task %s from list %s", taskID, tasklistID)); err != nil {
-				return err
+			if confirmErr := confirmDestructive(cmd, flags, fmt.Sprintf("delete task %s from list %s", taskID, tasklistID)); confirmErr != nil {
+				return confirmErr
 			}
 
 			svc, err := newTasksService(cmd.Context(), account)
@@ -432,8 +432,8 @@ func newTasksClearCmd(flags *rootFlags) *cobra.Command {
 				return usage("empty tasklistId")
 			}
 
-			if err := confirmDestructive(cmd, flags, fmt.Sprintf("clear completed tasks from list %s", tasklistID)); err != nil {
-				return err
+			if confirmErr := confirmDestructive(cmd, flags, fmt.Sprintf("clear completed tasks from list %s", tasklistID)); confirmErr != nil {
+				return confirmErr
 			}
 
 			svc, err := newTasksService(cmd.Context(), account)

@@ -119,8 +119,8 @@ func TestDriveLsCmd_TextAndJSON(t *testing.T) {
 		Files         []*drive.File `json:"files"`
 		NextPageToken string        `json:"nextPageToken"`
 	}
-	if err := json.Unmarshal([]byte(jsonOut), &parsed); err != nil {
-		t.Fatalf("json parse: %v\nout=%q", err, jsonOut)
+	if unmarshalErr := json.Unmarshal([]byte(jsonOut), &parsed); unmarshalErr != nil {
+		t.Fatalf("json parse: %v\nout=%q", unmarshalErr, jsonOut)
 	}
 	if parsed.NextPageToken != "npt" || len(parsed.Files) != 2 {
 		t.Fatalf("unexpected json: %#v", parsed)
