@@ -290,39 +290,38 @@ func TestGmailLabelsCreateCmd_JSON(t *testing.T) {
 	t.Cleanup(func() { newGmailService = origNew })
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
+		switch {
+		case r.Method == http.MethodGet && (strings.HasSuffix(r.URL.Path, "/users/me/labels") || strings.HasSuffix(r.URL.Path, "/gmail/v1/users/me/labels")):
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"labels": []map[string]any{}})
+		case r.Method == http.MethodPost && (strings.HasSuffix(r.URL.Path, "/users/me/labels") || strings.HasSuffix(r.URL.Path, "/gmail/v1/users/me/labels")):
+			var body struct {
+				Name                  string `json:"name"`
+				LabelListVisibility   string `json:"labelListVisibility"`
+				MessageListVisibility string `json:"messageListVisibility"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+
+			if body.Name != "Test Label" {
+				http.Error(w, "unexpected name", http.StatusBadRequest)
+				return
+			}
+			if body.LabelListVisibility != "labelShow" || body.MessageListVisibility != "show" {
+				http.Error(w, "unexpected visibility", http.StatusBadRequest)
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id":                    "Label_123",
+				"name":                  body.Name,
+				"type":                  "user",
+				"labelListVisibility":   body.LabelListVisibility,
+				"messageListVisibility": body.MessageListVisibility,
+			})
+		default:
 			http.NotFound(w, r)
-			return
 		}
-		if !(strings.HasSuffix(r.URL.Path, "/users/me/labels") || strings.HasSuffix(r.URL.Path, "/gmail/v1/users/me/labels")) {
-			http.NotFound(w, r)
-			return
-		}
-
-		var body struct {
-			Name                  string `json:"name"`
-			LabelListVisibility   string `json:"labelListVisibility"`
-			MessageListVisibility string `json:"messageListVisibility"`
-		}
-		_ = json.NewDecoder(r.Body).Decode(&body)
-
-		if body.Name != "Test Label" {
-			http.Error(w, "unexpected name", http.StatusBadRequest)
-			return
-		}
-		if body.LabelListVisibility != "labelShow" || body.MessageListVisibility != "show" {
-			http.Error(w, "unexpected visibility", http.StatusBadRequest)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id":                    "Label_123",
-			"name":                  body.Name,
-			"type":                  "user",
-			"labelListVisibility":   body.LabelListVisibility,
-			"messageListVisibility": body.MessageListVisibility,
-		})
 	}))
 	defer srv.Close()
 
@@ -374,21 +373,20 @@ func TestGmailLabelsCreateCmd_Text(t *testing.T) {
 	t.Cleanup(func() { newGmailService = origNew })
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
+		switch {
+		case r.Method == http.MethodGet && (strings.HasSuffix(r.URL.Path, "/users/me/labels") || strings.HasSuffix(r.URL.Path, "/gmail/v1/users/me/labels")):
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"labels": []map[string]any{}})
+		case r.Method == http.MethodPost && (strings.HasSuffix(r.URL.Path, "/users/me/labels") || strings.HasSuffix(r.URL.Path, "/gmail/v1/users/me/labels")):
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id":   "Label_456",
+				"name": "My Label",
+				"type": "user",
+			})
+		default:
 			http.NotFound(w, r)
-			return
 		}
-		if !(strings.HasSuffix(r.URL.Path, "/users/me/labels") || strings.HasSuffix(r.URL.Path, "/gmail/v1/users/me/labels")) {
-			http.NotFound(w, r)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id":   "Label_456",
-			"name": "My Label",
-			"type": "user",
-		})
 	}))
 	defer srv.Close()
 
@@ -463,6 +461,106 @@ func TestGmailLabelsCreateCmd_EmptyName(t *testing.T) {
 		t.Fatal("expected error for empty name")
 	}
 	if !strings.Contains(err.Error(), "label name is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestGmailLabelsCreateCmd_DuplicateName_Preflight(t *testing.T) {
+	origNew := newGmailService
+	t.Cleanup(func() { newGmailService = origNew })
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && (strings.HasSuffix(r.URL.Path, "/users/me/labels") || strings.HasSuffix(r.URL.Path, "/gmail/v1/users/me/labels")):
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"labels": []map[string]any{
+					{"id": "Label_9", "name": "My Label", "type": "user"},
+				},
+			})
+		case r.Method == http.MethodPost && (strings.HasSuffix(r.URL.Path, "/users/me/labels") || strings.HasSuffix(r.URL.Path, "/gmail/v1/users/me/labels")):
+			t.Fatalf("create should not be called when label exists")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	svc, err := gmail.NewService(context.Background(),
+		option.WithoutAuthentication(),
+		option.WithHTTPClient(srv.Client()),
+		option.WithEndpoint(srv.URL+"/"),
+	)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	newGmailService = func(context.Context, string) (*gmail.Service, error) { return svc, nil }
+
+	flags := &RootFlags{Account: "a@b.com"}
+
+	u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
+	if uiErr != nil {
+		t.Fatalf("ui.New: %v", uiErr)
+	}
+	ctx := ui.WithUI(context.Background(), u)
+
+	cmd := &GmailLabelsCreateCmd{}
+	if err := runKong(t, cmd, []string{"My Label"}, ctx, flags); err == nil {
+		t.Fatal("expected error for duplicate label name")
+	} else if !strings.Contains(err.Error(), "label already exists") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestGmailLabelsCreateCmd_DuplicateName_APIError(t *testing.T) {
+	origNew := newGmailService
+	t.Cleanup(func() { newGmailService = origNew })
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && (strings.HasSuffix(r.URL.Path, "/users/me/labels") || strings.HasSuffix(r.URL.Path, "/gmail/v1/users/me/labels")):
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"labels": []map[string]any{}})
+		case r.Method == http.MethodPost && (strings.HasSuffix(r.URL.Path, "/users/me/labels") || strings.HasSuffix(r.URL.Path, "/gmail/v1/users/me/labels")):
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error": map[string]any{
+					"code":    http.StatusConflict,
+					"message": "Label name exists",
+					"errors": []map[string]any{
+						{"message": "Label name exists", "domain": "global", "reason": "duplicate"},
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	svc, err := gmail.NewService(context.Background(),
+		option.WithoutAuthentication(),
+		option.WithHTTPClient(srv.Client()),
+		option.WithEndpoint(srv.URL+"/"),
+	)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	newGmailService = func(context.Context, string) (*gmail.Service, error) { return svc, nil }
+
+	flags := &RootFlags{Account: "a@b.com"}
+
+	u, uiErr := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
+	if uiErr != nil {
+		t.Fatalf("ui.New: %v", uiErr)
+	}
+	ctx := ui.WithUI(context.Background(), u)
+
+	cmd := &GmailLabelsCreateCmd{}
+	if err := runKong(t, cmd, []string{"My Label"}, ctx, flags); err == nil {
+		t.Fatal("expected error for duplicate label name")
+	} else if !strings.Contains(err.Error(), "label already exists") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

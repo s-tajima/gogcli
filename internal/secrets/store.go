@@ -45,6 +45,7 @@ const (
 var (
 	errMissingEmail          = errors.New("missing email")
 	errMissingRefreshToken   = errors.New("missing refresh token")
+	errMissingSecretKey      = errors.New("missing secret key")
 	errNoTTY                 = errors.New("no TTY available for keyring file backend password prompt")
 	errInvalidKeyringBackend = errors.New("invalid keyring backend")
 )
@@ -61,8 +62,8 @@ const (
 )
 
 func ResolveKeyringBackendInfo() (KeyringBackendInfo, error) {
-	if v := strings.TrimSpace(os.Getenv(keyringBackendEnv)); v != "" {
-		return KeyringBackendInfo{Value: strings.ToLower(v), Source: keyringBackendSourceEnv}, nil
+	if v := normalizeKeyringBackend(os.Getenv(keyringBackendEnv)); v != "" {
+		return KeyringBackendInfo{Value: v, Source: keyringBackendSourceEnv}, nil
 	}
 
 	cfg, err := config.ReadConfig()
@@ -71,14 +72,17 @@ func ResolveKeyringBackendInfo() (KeyringBackendInfo, error) {
 	}
 
 	if cfg.KeyringBackend != "" {
-		return KeyringBackendInfo{Value: cfg.KeyringBackend, Source: keyringBackendSourceConfig}, nil
+		if v := normalizeKeyringBackend(cfg.KeyringBackend); v != "" {
+			return KeyringBackendInfo{Value: v, Source: keyringBackendSourceConfig}, nil
+		}
 	}
 
 	return KeyringBackendInfo{Value: "auto", Source: keyringBackendSourceDefault}, nil
 }
 
 func allowedBackends(info KeyringBackendInfo) ([]keyring.BackendType, error) {
-	switch info.Value {
+	value := normalizeKeyringBackend(info.Value)
+	switch value {
 	case "", "auto":
 		return nil, nil
 	case "keychain":
@@ -86,7 +90,7 @@ func allowedBackends(info KeyringBackendInfo) ([]keyring.BackendType, error) {
 	case "file":
 		return []keyring.BackendType{keyring.FileBackend}, nil
 	default:
-		return nil, fmt.Errorf("%w: %q (expected auto, keychain, or file)", errInvalidKeyringBackend, info.Value)
+		return nil, fmt.Errorf("%w: %q (expected auto, keychain, or file)", errInvalidKeyringBackend, value)
 	}
 }
 
@@ -121,7 +125,11 @@ func fileKeyringPasswordFunc() keyring.PromptFunc {
 	return fileKeyringPasswordFuncFrom(os.Getenv(keyringPasswordEnv), term.IsTerminal(int(os.Stdin.Fd())))
 }
 
-func OpenDefault() (Store, error) {
+func normalizeKeyringBackend(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func openKeyring() (keyring.Keyring, error) {
 	// On Linux/WSL/containers, OS keychains (secret-service/kwallet) may be unavailable.
 	// In that case github.com/99designs/keyring falls back to the "file" backend,
 	// which *requires* both a directory and a password prompt function.
@@ -151,7 +159,56 @@ func OpenDefault() (Store, error) {
 		return nil, fmt.Errorf("open keyring: %w", err)
 	}
 
+	return ring, nil
+}
+
+func OpenDefault() (Store, error) {
+	ring, err := openKeyring()
+	if err != nil {
+		return nil, err
+	}
+
 	return &KeyringStore{ring: ring}, nil
+}
+
+func SetSecret(key string, value []byte) error {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return errMissingSecretKey
+	}
+
+	ring, err := openKeyring()
+	if err != nil {
+		return err
+	}
+
+	if err := ring.Set(keyring.Item{
+		Key:  key,
+		Data: value,
+	}); err != nil {
+		return wrapKeychainError(fmt.Errorf("store secret: %w", err))
+	}
+
+	return nil
+}
+
+func GetSecret(key string) ([]byte, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil, errMissingSecretKey
+	}
+
+	ring, err := openKeyring()
+	if err != nil {
+		return nil, err
+	}
+
+	item, err := ring.Get(key)
+	if err != nil {
+		return nil, fmt.Errorf("read secret: %w", err)
+	}
+
+	return item.Data, nil
 }
 
 func (s *KeyringStore) Keys() ([]string, error) {

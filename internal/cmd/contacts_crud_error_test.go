@@ -231,7 +231,7 @@ func TestContactsOtherDelete_CopyFailure(t *testing.T) {
 
 	flags := &RootFlags{Account: "a@b.com", Force: true}
 
-	err = runKong(t, &ContactsOtherDeleteCmd{}, []string{"otherContacts/abc123"}, context.Background(), flags)
+	err := runKong(t, &ContactsOtherDeleteCmd{}, []string{"otherContacts/abc123"}, context.Background(), flags)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -257,7 +257,7 @@ func TestContactsOtherDelete_CopyMissingResource(t *testing.T) {
 
 	flags := &RootFlags{Account: "a@b.com", Force: true}
 
-	err = runKong(t, &ContactsOtherDeleteCmd{}, []string{"otherContacts/abc123"}, context.Background(), flags)
+	err := runKong(t, &ContactsOtherDeleteCmd{}, []string{"otherContacts/abc123"}, context.Background(), flags)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -297,7 +297,7 @@ func TestContactsOtherDelete_DeleteFailure(t *testing.T) {
 
 	flags := &RootFlags{Account: "a@b.com", Force: true}
 
-	err = runKong(t, &ContactsOtherDeleteCmd{}, []string{"otherContacts/abc123"}, context.Background(), flags)
+	err := runKong(t, &ContactsOtherDeleteCmd{}, []string{"otherContacts/abc123"}, context.Background(), flags)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
