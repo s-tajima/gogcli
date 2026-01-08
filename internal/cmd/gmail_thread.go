@@ -95,6 +95,10 @@ func (c *GmailThreadGetCmd) Run(ctx context.Context, flags *RootFlags) error {
 			Cached        bool   `json:"cached"`
 			DownloadError string `json:"error,omitempty"`
 		}
+		type unsubscribed struct {
+			MessageID   string `json:"messageId"`
+			Unsubscribe string `json:"unsubscribe"`
+		}
 		downloadedFiles := make([]downloaded, 0)
 		if c.Download && thread != nil {
 			for _, msg := range thread.Messages {
@@ -119,9 +123,26 @@ func (c *GmailThreadGetCmd) Run(ctx context.Context, flags *RootFlags) error {
 				}
 			}
 		}
+		unsubscribes := make([]unsubscribed, 0)
+		if thread != nil {
+			for _, msg := range thread.Messages {
+				if msg == nil || msg.Id == "" {
+					continue
+				}
+				unsubscribe := bestUnsubscribeLink(msg.Payload)
+				if unsubscribe == "" {
+					continue
+				}
+				unsubscribes = append(unsubscribes, unsubscribed{
+					MessageID:   msg.Id,
+					Unsubscribe: unsubscribe,
+				})
+			}
+		}
 		return outfmt.WriteJSON(os.Stdout, map[string]any{
-			"thread":     thread,
-			"downloaded": downloadedFiles,
+			"thread":       thread,
+			"downloaded":   downloadedFiles,
+			"unsubscribes": unsubscribes,
 		})
 	}
 	if thread == nil || len(thread.Messages) == 0 {
@@ -142,6 +163,10 @@ func (c *GmailThreadGetCmd) Run(ctx context.Context, flags *RootFlags) error {
 		u.Out().Printf("To: %s", headerValue(msg.Payload, "To"))
 		u.Out().Printf("Subject: %s", headerValue(msg.Payload, "Subject"))
 		u.Out().Printf("Date: %s", headerValue(msg.Payload, "Date"))
+		unsubscribe := bestUnsubscribeLink(msg.Payload)
+		if unsubscribe != "" {
+			u.Out().Printf("Unsubscribe: %s", unsubscribe)
+		}
 		u.Out().Println("")
 
 		body, isHTML := bestBodyForDisplay(msg.Payload)

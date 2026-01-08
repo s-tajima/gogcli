@@ -55,6 +55,9 @@ func (c *GmailGetCmd) Run(ctx context.Context, flags *RootFlags) error {
 		if len(headerList) == 0 {
 			headerList = []string{"From", "To", "Subject", "Date"}
 		}
+		if !hasHeaderName(headerList, "List-Unsubscribe") {
+			headerList = append(headerList, "List-Unsubscribe")
+		}
 		call = call.MetadataHeaders(headerList...)
 	}
 
@@ -63,6 +66,7 @@ func (c *GmailGetCmd) Run(ctx context.Context, flags *RootFlags) error {
 		return err
 	}
 
+	unsubscribe := bestUnsubscribeLink(msg.Payload)
 	if outfmt.IsJSON(ctx) {
 		// Include a flattened headers map for easier querying
 		// (e.g., jq '.headers.to' instead of complex nested queries)
@@ -74,10 +78,14 @@ func (c *GmailGetCmd) Run(ctx context.Context, flags *RootFlags) error {
 			"subject": headerValue(msg.Payload, "Subject"),
 			"date":    headerValue(msg.Payload, "Date"),
 		}
-		return outfmt.WriteJSON(os.Stdout, map[string]any{
+		payload := map[string]any{
 			"message": msg,
 			"headers": headers,
-		})
+		}
+		if unsubscribe != "" {
+			payload["unsubscribe"] = unsubscribe
+		}
+		return outfmt.WriteJSON(os.Stdout, payload)
 	}
 
 	u.Out().Printf("id\t%s", msg.Id)
@@ -102,6 +110,9 @@ func (c *GmailGetCmd) Run(ctx context.Context, flags *RootFlags) error {
 		u.Out().Printf("to\t%s", headerValue(msg.Payload, "To"))
 		u.Out().Printf("subject\t%s", headerValue(msg.Payload, "Subject"))
 		u.Out().Printf("date\t%s", headerValue(msg.Payload, "Date"))
+		if unsubscribe != "" {
+			u.Out().Printf("unsubscribe\t%s", unsubscribe)
+		}
 		if format == gmailFormatFull {
 			body := bestBodyText(msg.Payload)
 			if body != "" {
