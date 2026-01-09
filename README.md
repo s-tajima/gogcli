@@ -855,15 +855,11 @@ After installing completions, start a new shell session for changes to take effe
 
 ## Development
 
-After cloning, install tools and (optionally) git hooks:
+After cloning, install tools:
 
 ```bash
 make tools
-lefthook install
 ```
-
-This installs [lefthook](https://github.com/evilmartians/lefthook) pre-commit and pre-push hooks for linting and testing.
-Install lefthook once: `brew install lefthook` (or use your package manager).
 
 Pinned tools (installed into `.tools/`):
 
