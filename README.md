@@ -238,7 +238,7 @@ gog keep get <noteId> --account you@yourdomain.com
 
 ### Environment Variables
 
-- `GOG_ACCOUNT` - Default account email to use (avoids repeating `--account` flag)
+- `GOG_ACCOUNT` - Default account email to use (avoids repeating `--account`; otherwise uses keyring default or a single stored token)
 - `GOG_JSON` - Default JSON output
 - `GOG_PLAIN` - Default plain output
 - `GOG_COLOR` - Color mode: `auto` (default), `always`, or `never`

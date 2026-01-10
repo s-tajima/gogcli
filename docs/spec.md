@@ -120,7 +120,7 @@ We intentionally avoid storing refresh tokens in plain JSON on disk.
 
 Environment:
 
-- `GOG_ACCOUNT=you@gmail.com` (used when `--account` is not set)
+- `GOG_ACCOUNT=you@gmail.com` (used when `--account` is not set; otherwise uses keyring default or a single stored token)
 - `GOG_KEYRING_PASSWORD=...` (used when keyring falls back to encrypted file backend in non-interactive environments)
 - `GOG_KEYRING_BACKEND={auto|keychain|file}` (force backend; use `file` to avoid Keychain prompts and pair with `GOG_KEYRING_PASSWORD` for non-interactive)
 - `config.json` can also set `keyring_backend` (JSON5; env vars take precedence)

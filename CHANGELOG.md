@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.3 - 2026-01-10
+
+### Fixed
+
+- CLI: infer account when `--account`/`GOG_ACCOUNT` not set (uses keyring default or single stored token).
+
 ## 0.5.2 - 2026-01-10
 
 ### Fixed
