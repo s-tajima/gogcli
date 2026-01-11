@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Sheets: `gog auth add --services sheets --readonly` now includes Drive read-only scope so `gog sheets export` works. (#62)
+
+### Tests
+
+- Auth: expand scope matrix regression tests for `--readonly` and `--drive-scope`. (#63)
+
 ## 0.5.4 - 2026-01-10
 
 ### Changed

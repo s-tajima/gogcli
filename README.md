@@ -203,11 +203,18 @@ To request read-only scopes (write operations will fail with 403 insufficient sc
 gog auth add you@gmail.com --services drive,calendar --readonly
 ```
 
-To use Drive's file-limited scope (write-capable, but limited to files created/opened by this app):
+To control Drive’s scope (default: `full`):
 
 ```bash
+gog auth add you@gmail.com --services drive --drive-scope full
+gog auth add you@gmail.com --services drive --drive-scope readonly
 gog auth add you@gmail.com --services drive --drive-scope file
 ```
+
+Notes:
+
+- `--drive-scope readonly` is enough for listing/downloading/exporting via Drive (write operations will 403).
+- `--drive-scope file` is write-capable (limited to files created/opened by this app) and can’t be combined with `--readonly`.
 
 If you need to add services later and Google doesn't return a refresh token, re-run with `--force-consent`:
 
