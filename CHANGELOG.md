@@ -1,6 +1,10 @@
 # Changelog
 
-## 0.6.2 - Unreleased
+## 0.7.0 - Unreleased
+
+### Fixed
+
+- Gmail: include `gmail.settings.sharing` scope for filter operations to avoid 403 insufficientPermissions. (#69) — thanks @ryanh-ai.
 
 ### Build
 

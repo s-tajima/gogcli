@@ -241,6 +241,7 @@ func TestScopesForManageWithOptions_Readonly(t *testing.T) {
 	notWant := []string{
 		"https://mail.google.com/",
 		"https://www.googleapis.com/auth/gmail.settings.basic",
+		"https://www.googleapis.com/auth/gmail.settings.sharing",
 		"https://www.googleapis.com/auth/drive",
 		"https://www.googleapis.com/auth/calendar",
 		"https://www.googleapis.com/auth/contacts",
@@ -389,6 +390,23 @@ func TestScopes_DocsIncludesDriveAndDocsScopes(t *testing.T) {
 		}
 
 		if !found {
+			t.Fatalf("missing %q in %v", want, scopes)
+		}
+	}
+}
+
+func TestScopes_GmailIncludesSettingsSharing(t *testing.T) {
+	scopes, err := Scopes(ServiceGmail)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	for _, want := range []string{
+		"https://mail.google.com/",
+		"https://www.googleapis.com/auth/gmail.settings.basic",
+		"https://www.googleapis.com/auth/gmail.settings.sharing",
+	} {
+		if !containsScope(scopes, want) {
 			t.Fatalf("missing %q in %v", want, scopes)
 		}
 	}

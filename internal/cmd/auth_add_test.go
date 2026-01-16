@@ -286,6 +286,9 @@ func TestAuthAddCmd_ReadonlyScopes(t *testing.T) {
 	if containsStringInSlice(gotOpts.Scopes, "https://www.googleapis.com/auth/gmail.settings.basic") {
 		t.Fatalf("unexpected gmail.settings.basic in %v", gotOpts.Scopes)
 	}
+	if containsStringInSlice(gotOpts.Scopes, "https://www.googleapis.com/auth/gmail.settings.sharing") {
+		t.Fatalf("unexpected gmail.settings.sharing in %v", gotOpts.Scopes)
+	}
 	if containsStringInSlice(gotOpts.Scopes, "https://www.googleapis.com/auth/drive") {
 		t.Fatalf("unexpected drive in %v", gotOpts.Scopes)
 	}

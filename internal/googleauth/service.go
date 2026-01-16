@@ -71,6 +71,7 @@ var serviceInfoByService = map[Service]serviceInfo{
 		scopes: []string{
 			"https://mail.google.com/",
 			"https://www.googleapis.com/auth/gmail.settings.basic",
+			"https://www.googleapis.com/auth/gmail.settings.sharing",
 		},
 		user: true,
 		apis: []string{"Gmail API"},

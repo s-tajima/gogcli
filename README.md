@@ -237,7 +237,7 @@ Service scope matrix (auto-generated; run `go run scripts/gen-auth-services-md.g
 <!-- auth-services:start -->
 | Service | User | APIs | Scopes | Notes |
 | --- | --- | --- | --- | --- |
-| gmail | yes | Gmail API | `https://mail.google.com/`<br>`https://www.googleapis.com/auth/gmail.settings.basic` |  |
+| gmail | yes | Gmail API | `https://mail.google.com/`<br>`https://www.googleapis.com/auth/gmail.settings.basic`<br>`https://www.googleapis.com/auth/gmail.settings.sharing` |  |
 | calendar | yes | Calendar API | `https://www.googleapis.com/auth/calendar` |  |
 | drive | yes | Drive API | `https://www.googleapis.com/auth/drive` |  |
 | docs | yes | Docs API, Drive API | `https://www.googleapis.com/auth/drive`<br>`https://www.googleapis.com/auth/documents` | Export/copy/create via Drive |
