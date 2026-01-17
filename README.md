@@ -1173,7 +1173,18 @@ Go test wrapper (opt-in):
 GOG_LIVE=1 go test -tags=integration ./internal/integration -run Live
 ```
 
-Optional env: `GOG_LIVE_FAST=1`, `GOG_LIVE_SKIP=groups,keep`, `GOG_LIVE_AUTH=all,groups`, `GOG_LIVE_ALLOW_NONTEST=1`.
+Optional env:
+- `GOG_LIVE_FAST=1`
+- `GOG_LIVE_SKIP=groups,keep`
+- `GOG_LIVE_AUTH=all,groups`
+- `GOG_LIVE_ALLOW_NONTEST=1`
+- `GOG_LIVE_EMAIL_TEST=steipete+gogtest@gmail.com`
+- `GOG_LIVE_GROUP_EMAIL=group@domain`
+- `GOG_LIVE_CLASSROOM_COURSE=<courseId>`
+- `GOG_LIVE_CLASSROOM_CREATE=1`
+- `GOG_LIVE_TRACK=1`
+- `GOG_KEEP_SERVICE_ACCOUNT=/path/to/service-account.json`
+- `GOG_KEEP_IMPERSONATE=user@workspace-domain`
 
 ### Make Shortcut
 
