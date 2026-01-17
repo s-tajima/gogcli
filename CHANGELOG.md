@@ -9,6 +9,7 @@
 - Auth: account manager upgrade respects managed services and skips Keep OAuth scopes. (#73) — thanks @salmonumbrella.
 - Classroom: normalize assignee updates + fix grade update masks. (#74) — thanks @salmonumbrella.
 - Classroom: scan pages when filtering coursework/materials by topic. (#73) — thanks @salmonumbrella.
+- CLI: enable shell completions and stop flag suggestions after `--`. (#77) — thanks @salmonumbrella.
 
 ### Build
 
