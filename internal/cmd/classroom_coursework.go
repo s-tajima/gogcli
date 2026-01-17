@@ -22,12 +22,13 @@ type ClassroomCourseworkCmd struct {
 }
 
 type ClassroomCourseworkListCmd struct {
-	CourseID string `arg:"" name:"courseId" help:"Course ID or alias"`
-	States   string `name:"state" help:"Coursework states filter (comma-separated: DRAFT,PUBLISHED,DELETED)"`
-	Topic    string `name:"topic" help:"Filter by topic ID"`
-	OrderBy  string `name:"order-by" help:"Order by (e.g., updateTime desc, dueDate desc)"`
-	Max      int64  `name:"max" aliases:"limit" help:"Max results" default:"100"`
-	Page     string `name:"page" help:"Page token"`
+	CourseID  string `arg:"" name:"courseId" help:"Course ID or alias"`
+	States    string `name:"state" help:"Coursework states filter (comma-separated: DRAFT,PUBLISHED,DELETED)"`
+	Topic     string `name:"topic" help:"Filter by topic ID"`
+	OrderBy   string `name:"order-by" help:"Order by (e.g., updateTime desc, dueDate desc)"`
+	Max       int64  `name:"max" aliases:"limit" help:"Max results" default:"100"`
+	Page      string `name:"page" help:"Page token"`
+	ScanPages int    `name:"scan-pages" help:"Pages to scan when filtering by topic" default:"3"`
 }
 
 func (c *ClassroomCourseworkListCmd) Run(ctx context.Context, flags *RootFlags) error {
@@ -46,45 +47,71 @@ func (c *ClassroomCourseworkListCmd) Run(ctx context.Context, flags *RootFlags) 
 		return wrapClassroomError(err)
 	}
 
-	call := svc.Courses.CourseWork.List(courseID).PageSize(c.Max).PageToken(c.Page).Context(ctx)
-	if states := splitCSV(c.States); len(states) > 0 {
-		upper := make([]string, 0, len(states))
-		for _, state := range states {
-			upper = append(upper, strings.ToUpper(state))
+	makeCall := func(page string) *classroom.CoursesCourseWorkListCall {
+		call := svc.Courses.CourseWork.List(courseID).PageSize(c.Max).PageToken(page).Context(ctx)
+		if states := splitCSV(c.States); len(states) > 0 {
+			upper := make([]string, 0, len(states))
+			for _, state := range states {
+				upper = append(upper, strings.ToUpper(state))
+			}
+			call.CourseWorkStates(upper...)
 		}
-		call.CourseWorkStates(upper...)
-	}
-	if v := strings.TrimSpace(c.OrderBy); v != "" {
-		call.OrderBy(v)
-	}
-
-	resp, err := call.Do()
-	if err != nil {
-		return wrapClassroomError(err)
+		if v := strings.TrimSpace(c.OrderBy); v != "" {
+			call.OrderBy(v)
+		}
+		return call
 	}
 
-	// Client-side filter by topic (API doesn't support server-side topic filter)
 	topicFilter := strings.TrimSpace(c.Topic)
-	coursework := resp.CourseWork
-	if topicFilter != "" {
-		filtered := make([]*classroom.CourseWork, 0, len(coursework))
-		for _, work := range coursework {
+	pageToken := c.Page
+	scanPages := c.ScanPages
+	if scanPages <= 0 {
+		scanPages = 1
+	}
+
+	var (
+		coursework    []*classroom.CourseWork
+		nextPageToken string
+	)
+	for page := 0; ; page++ {
+		resp, err := makeCall(pageToken).Do()
+		if err != nil {
+			return wrapClassroomError(err)
+		}
+		nextPageToken = resp.NextPageToken
+
+		if topicFilter == "" {
+			coursework = resp.CourseWork
+			break
+		}
+
+		filtered := make([]*classroom.CourseWork, 0, len(resp.CourseWork))
+		for _, work := range resp.CourseWork {
 			if work != nil && work.TopicId == topicFilter {
 				filtered = append(filtered, work)
 			}
 		}
-		coursework = filtered
+		if len(filtered) > 0 {
+			coursework = filtered
+			break
+		}
+		if nextPageToken == "" || page+1 >= scanPages {
+			coursework = filtered
+			break
+		}
+		pageToken = nextPageToken
 	}
 
 	if outfmt.IsJSON(ctx) {
 		return outfmt.WriteJSON(os.Stdout, map[string]any{
 			"coursework":    coursework,
-			"nextPageToken": resp.NextPageToken,
+			"nextPageToken": nextPageToken,
 		})
 	}
 
 	if len(coursework) == 0 {
 		u.Err().Println("No coursework")
+		printNextPageHint(u, nextPageToken)
 		return nil
 	}
 
@@ -104,7 +131,7 @@ func (c *ClassroomCourseworkListCmd) Run(ctx context.Context, flags *RootFlags) 
 			formatFloatValue(work.MaxPoints),
 		)
 	}
-	printNextPageHint(u, resp.NextPageToken)
+	printNextPageHint(u, nextPageToken)
 	return nil
 }
 

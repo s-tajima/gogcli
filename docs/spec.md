@@ -185,13 +185,13 @@ Flag aliases:
 - `gog classroom teachers add <courseId> <userId>`
 - `gog classroom teachers remove <courseId> <userId>`
 - `gog classroom roster <courseId> [--students] [--teachers]`
-- `gog classroom coursework <courseId> [--state ...] [--topic TOPIC_ID] [--max N] [--page TOKEN]`
+- `gog classroom coursework <courseId> [--state ...] [--topic TOPIC_ID] [--scan-pages N] [--max N] [--page TOKEN]`
 - `gog classroom coursework get <courseId> <courseworkId>`
 - `gog classroom coursework create <courseId> --title TITLE [--type ASSIGNMENT|...]`
 - `gog classroom coursework update <courseId> <courseworkId> [--title ...]`
 - `gog classroom coursework delete <courseId> <courseworkId>`
 - `gog classroom coursework assignees <courseId> <courseworkId> [--mode ...] [--add-student ...]`
-- `gog classroom materials <courseId> [--state ...] [--topic TOPIC_ID] [--max N] [--page TOKEN]`
+- `gog classroom materials <courseId> [--state ...] [--topic TOPIC_ID] [--scan-pages N] [--max N] [--page TOKEN]`
 - `gog classroom materials get <courseId> <materialId>`
 - `gog classroom materials create <courseId> --title TITLE`
 - `gog classroom materials update <courseId> <materialId> [--title ...]`

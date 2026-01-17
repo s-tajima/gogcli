@@ -428,12 +428,10 @@ func TestManageServer_HandleAuthStart(t *testing.T) {
 		t.Fatalf("status: %d", rr.Code)
 	}
 	loc := rr.Header().Get("Location")
-	var parsed *url.URL
 
-	if p, err := url.Parse(loc); err != nil {
-		t.Fatalf("parse location: %v", err)
-	} else {
-		parsed = p
+	parsed, parseErr := url.Parse(loc)
+	if parseErr != nil {
+		t.Fatalf("parse location: %v", parseErr)
 	}
 
 	if parsed.Host != "example.com" {
@@ -857,5 +855,123 @@ func TestStartManageServer_Timeout(t *testing.T) {
 
 	if !strings.Contains(opened, "http://127.0.0.1:") {
 		t.Fatalf("expected browser URL, got %q", opened)
+	}
+}
+
+func TestManageServer_HandleAuthUpgrade(t *testing.T) {
+	origRead := readClientCredentials
+	origState := randomStateFn
+	origEndpoint := oauthEndpoint
+
+	t.Cleanup(func() {
+		readClientCredentials = origRead
+		randomStateFn = origState
+		oauthEndpoint = origEndpoint
+	})
+
+	readClientCredentials = func() (config.ClientCredentials, error) {
+		return config.ClientCredentials{ClientID: "id", ClientSecret: "secret"}, nil
+	}
+	randomStateFn = func() (string, error) { return "state456", nil }
+	oauthEndpoint = oauth2.Endpoint{AuthURL: "http://example.com/auth", TokenURL: "http://example.com/token"}
+
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+
+	t.Cleanup(func() { _ = ln.Close() })
+
+	ms := &ManageServer{
+		listener: ln,
+		opts:     ManageServerOptions{Services: []Service{ServiceGmail}},
+	}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/auth/upgrade?email=test@example.com", nil)
+	ms.handleAuthUpgrade(rr, req)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("status: %d", rr.Code)
+	}
+
+	loc := rr.Header().Get("Location")
+
+	parsed, parseErr := url.Parse(loc)
+	if parseErr != nil {
+		t.Fatalf("parse location: %v", parseErr)
+	}
+
+	if parsed.Host != "example.com" {
+		t.Fatalf("unexpected host: %q", parsed.Host)
+	}
+
+	if state := parsed.Query().Get("state"); state != "state456" {
+		t.Fatalf("unexpected state: %q", state)
+	}
+
+	if ms.oauthState != "state456" {
+		t.Fatalf("expected oauthState set")
+	}
+
+	scope := parsed.Query().Get("scope")
+
+	expectedScopes, err := ScopesForManage([]Service{ServiceGmail})
+	if err != nil {
+		t.Fatalf("ScopesForManage: %v", err)
+	}
+
+	scopeSet := make(map[string]bool, len(expectedScopes))
+	for _, s := range strings.Fields(scope) {
+		scopeSet[s] = true
+	}
+
+	for _, s := range expectedScopes {
+		if !scopeSet[s] {
+			t.Fatalf("expected scope %q in %q", s, scope)
+		}
+	}
+
+	if scopeSet["https://www.googleapis.com/auth/keep.readonly"] {
+		t.Fatalf("unexpected keep scope in %q", scope)
+	}
+
+	// Check for login_hint (pre-selects the email)
+	if loginHint := parsed.Query().Get("login_hint"); loginHint != "test@example.com" {
+		t.Fatalf("expected login_hint=test@example.com, got %q", loginHint)
+	}
+
+	// Check for prompt=consent (forces consent screen)
+	if prompt := parsed.Query().Get("prompt"); prompt != "consent" {
+		t.Fatalf("expected prompt=consent, got %q", prompt)
+	}
+}
+
+func TestManageServer_HandleAuthUpgrade_MissingEmail(t *testing.T) {
+	ms := &ManageServer{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/auth/upgrade", nil)
+	ms.handleAuthUpgrade(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestManageServer_HandleAuthUpgrade_CredentialsError(t *testing.T) {
+	origRead := readClientCredentials
+
+	t.Cleanup(func() { readClientCredentials = origRead })
+
+	readClientCredentials = func() (config.ClientCredentials, error) {
+		return config.ClientCredentials{}, errBoom
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/auth/upgrade?email=test@example.com", nil)
+	ms := &ManageServer{}
+	ms.handleAuthUpgrade(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", rr.Code)
 	}
 }

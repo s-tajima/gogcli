@@ -21,12 +21,13 @@ type ClassroomMaterialsCmd struct {
 }
 
 type ClassroomMaterialsListCmd struct {
-	CourseID string `arg:"" name:"courseId" help:"Course ID or alias"`
-	States   string `name:"state" help:"Material states filter (comma-separated: PUBLISHED,DRAFT,DELETED)"`
-	Topic    string `name:"topic" help:"Filter by topic ID"`
-	OrderBy  string `name:"order-by" help:"Order by (e.g., updateTime desc)"`
-	Max      int64  `name:"max" aliases:"limit" help:"Max results" default:"100"`
-	Page     string `name:"page" help:"Page token"`
+	CourseID  string `arg:"" name:"courseId" help:"Course ID or alias"`
+	States    string `name:"state" help:"Material states filter (comma-separated: PUBLISHED,DRAFT,DELETED)"`
+	Topic     string `name:"topic" help:"Filter by topic ID"`
+	OrderBy   string `name:"order-by" help:"Order by (e.g., updateTime desc)"`
+	Max       int64  `name:"max" aliases:"limit" help:"Max results" default:"100"`
+	Page      string `name:"page" help:"Page token"`
+	ScanPages int    `name:"scan-pages" help:"Pages to scan when filtering by topic" default:"3"`
 }
 
 func (c *ClassroomMaterialsListCmd) Run(ctx context.Context, flags *RootFlags) error {
@@ -45,45 +46,71 @@ func (c *ClassroomMaterialsListCmd) Run(ctx context.Context, flags *RootFlags) e
 		return wrapClassroomError(err)
 	}
 
-	call := svc.Courses.CourseWorkMaterials.List(courseID).PageSize(c.Max).PageToken(c.Page).Context(ctx)
-	if states := splitCSV(c.States); len(states) > 0 {
-		upper := make([]string, 0, len(states))
-		for _, state := range states {
-			upper = append(upper, strings.ToUpper(state))
+	makeCall := func(page string) *classroom.CoursesCourseWorkMaterialsListCall {
+		call := svc.Courses.CourseWorkMaterials.List(courseID).PageSize(c.Max).PageToken(page).Context(ctx)
+		if states := splitCSV(c.States); len(states) > 0 {
+			upper := make([]string, 0, len(states))
+			for _, state := range states {
+				upper = append(upper, strings.ToUpper(state))
+			}
+			call.CourseWorkMaterialStates(upper...)
 		}
-		call.CourseWorkMaterialStates(upper...)
-	}
-	if v := strings.TrimSpace(c.OrderBy); v != "" {
-		call.OrderBy(v)
-	}
-
-	resp, err := call.Do()
-	if err != nil {
-		return wrapClassroomError(err)
+		if v := strings.TrimSpace(c.OrderBy); v != "" {
+			call.OrderBy(v)
+		}
+		return call
 	}
 
-	// Client-side filter by topic (API doesn't support server-side topic filter)
 	topicFilter := strings.TrimSpace(c.Topic)
-	materials := resp.CourseWorkMaterial
-	if topicFilter != "" {
-		filtered := make([]*classroom.CourseWorkMaterial, 0, len(materials))
-		for _, material := range materials {
+	pageToken := c.Page
+	scanPages := c.ScanPages
+	if scanPages <= 0 {
+		scanPages = 1
+	}
+
+	var (
+		materials     []*classroom.CourseWorkMaterial
+		nextPageToken string
+	)
+	for page := 0; ; page++ {
+		resp, err := makeCall(pageToken).Do()
+		if err != nil {
+			return wrapClassroomError(err)
+		}
+		nextPageToken = resp.NextPageToken
+
+		if topicFilter == "" {
+			materials = resp.CourseWorkMaterial
+			break
+		}
+
+		filtered := make([]*classroom.CourseWorkMaterial, 0, len(resp.CourseWorkMaterial))
+		for _, material := range resp.CourseWorkMaterial {
 			if material != nil && material.TopicId == topicFilter {
 				filtered = append(filtered, material)
 			}
 		}
-		materials = filtered
+		if len(filtered) > 0 {
+			materials = filtered
+			break
+		}
+		if nextPageToken == "" || page+1 >= scanPages {
+			materials = filtered
+			break
+		}
+		pageToken = nextPageToken
 	}
 
 	if outfmt.IsJSON(ctx) {
 		return outfmt.WriteJSON(os.Stdout, map[string]any{
 			"materials":     materials,
-			"nextPageToken": resp.NextPageToken,
+			"nextPageToken": nextPageToken,
 		})
 	}
 
 	if len(materials) == 0 {
 		u.Err().Println("No materials")
+		printNextPageHint(u, nextPageToken)
 		return nil
 	}
 
@@ -101,7 +128,7 @@ func (c *ClassroomMaterialsListCmd) Run(ctx context.Context, flags *RootFlags) e
 			sanitizeTab(material.UpdateTime),
 		)
 	}
-	printNextPageHint(u, resp.NextPageToken)
+	printNextPageHint(u, nextPageToken)
 	return nil
 }
 

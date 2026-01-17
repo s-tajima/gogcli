@@ -74,6 +74,26 @@ func shouldEnsureKeychainAccess() (bool, error) {
 	return backendInfo.Value != "file", nil
 }
 
+func manageServices(services []Service) []Service {
+	if len(services) == 0 {
+		services = UserServices()
+	}
+
+	filtered := make([]Service, 0, len(services))
+	for _, svc := range services {
+		if svc == ServiceKeep {
+			continue
+		}
+		filtered = append(filtered, svc)
+	}
+
+	if len(filtered) == 0 {
+		return UserServices()
+	}
+
+	return filtered
+}
+
 // StartManageServer starts the accounts management server and opens browser
 func StartManageServer(ctx context.Context, opts ManageServerOptions) error {
 	if opts.Timeout <= 0 {
@@ -108,6 +128,7 @@ func StartManageServer(ctx context.Context, opts ManageServerOptions) error {
 	mux.HandleFunc("/", ms.handleAccountsPage)
 	mux.HandleFunc("/accounts", ms.handleListAccounts)
 	mux.HandleFunc("/auth/start", ms.handleAuthStart)
+	mux.HandleFunc("/auth/upgrade", ms.handleAuthUpgrade)
 	mux.HandleFunc("/oauth2/callback", ms.handleOAuthCallback)
 	mux.HandleFunc("/set-default", ms.handleSetDefault)
 	mux.HandleFunc("/remove-account", ms.handleRemoveAccount)
@@ -219,10 +240,7 @@ func (ms *ManageServer) handleAuthStart(w http.ResponseWriter, r *http.Request) 
 	}
 	ms.oauthState = state
 
-	services := ms.opts.Services
-	if len(services) == 0 {
-		services = AllServices()
-	}
+	services := manageServices(ms.opts.Services)
 
 	scopes, err := ScopesForManage(services)
 	if err != nil {
@@ -242,6 +260,56 @@ func (ms *ManageServer) handleAuthStart(w http.ResponseWriter, r *http.Request) 
 	}
 
 	authURL := cfg.AuthCodeURL(state, authURLParams(ms.opts.ForceConsent)...)
+	http.Redirect(w, r, authURL, http.StatusFound)
+}
+
+func (ms *ManageServer) handleAuthUpgrade(w http.ResponseWriter, r *http.Request) {
+	// Similar to handleAuthStart, but always forces consent to get new scopes
+	email := r.URL.Query().Get("email")
+	if email == "" {
+		http.Error(w, "Missing email parameter", http.StatusBadRequest)
+		return
+	}
+
+	creds, err := readClientCredentials()
+	if err != nil {
+		http.Error(w, "OAuth credentials not configured. Run: gog auth credentials <file>", http.StatusInternalServerError)
+		return
+	}
+
+	state, err := randomStateFn()
+	if err != nil {
+		http.Error(w, "Failed to generate state", http.StatusInternalServerError)
+		return
+	}
+	ms.oauthState = state
+
+	// Use requested manage services (exclude Keep)
+	services := manageServices(ms.opts.Services)
+
+	scopes, err := ScopesForManage(services)
+	if err != nil {
+		http.Error(w, "Failed to get scopes", http.StatusInternalServerError)
+		return
+	}
+
+	port := ms.listener.Addr().(*net.TCPAddr).Port
+	redirectURI := fmt.Sprintf("http://127.0.0.1:%d/oauth2/callback", port)
+
+	cfg := oauth2.Config{
+		ClientID:     creds.ClientID,
+		ClientSecret: creds.ClientSecret,
+		Endpoint:     oauthEndpoint,
+		RedirectURL:  redirectURI,
+		Scopes:       scopes,
+	}
+
+	// Always force consent for upgrades to ensure user sees all scopes
+	// Add login_hint to pre-select the account
+	authURL := cfg.AuthCodeURL(state,
+		append(authURLParams(true),
+			oauth2.SetAuthURLParam("login_hint", email))...)
+
 	http.Redirect(w, r, authURL, http.StatusFound)
 }
 
@@ -280,10 +348,7 @@ func (ms *ManageServer) handleOAuthCallback(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	services := ms.opts.Services
-	if len(services) == 0 {
-		services = AllServices()
-	}
+	services := manageServices(ms.opts.Services)
 
 	scopes, err := ScopesForManage(services)
 	if err != nil {
@@ -566,9 +631,19 @@ func renderSuccessPageWithDetails(w http.ResponseWriter, email string, services 
 		_, _ = w.Write([]byte("Success! You can close this window."))
 		return
 	}
+
+	// Show available user services for connected vs missing
+	userServices := UserServices()
+	allServices := make([]string, 0, len(userServices))
+
+	for _, svc := range userServices {
+		allServices = append(allServices, string(svc))
+	}
+
 	data := successTemplateData{
 		Email:            email,
 		Services:         services,
+		AllServices:      allServices,
 		CountdownSeconds: postSuccessDisplaySeconds,
 	}
 	_ = tmpl.Execute(w, data)

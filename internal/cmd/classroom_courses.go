@@ -466,6 +466,11 @@ func (c *ClassroomCoursesLeaveCmd) Run(ctx context.Context, flags *RootFlags) er
 		return usage("empty user")
 	}
 
+	err = confirmDestructive(ctx, flags, fmt.Sprintf("remove %s %s from course %s", role, userID, courseID))
+	if err != nil {
+		return err
+	}
+
 	svc, err := newClassroomService(ctx, account)
 	if err != nil {
 		return wrapClassroomError(err)
