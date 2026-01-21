@@ -43,7 +43,7 @@ func stripHTMLTags(s string) string {
 }
 
 type GmailThreadCmd struct {
-	Get         GmailThreadGetCmd         `cmd:"" name:"get" help:"Get a thread with all messages (optionally download attachments)"`
+	Get         GmailThreadGetCmd         `cmd:"" name:"get" default:"withargs" help:"Get a thread with all messages (optionally download attachments)"`
 	Modify      GmailThreadModifyCmd      `cmd:"" name:"modify" help:"Modify labels on all messages in a thread"`
 	Attachments GmailThreadAttachmentsCmd `cmd:"" name:"attachments" help:"List all attachments in a thread"`
 }
