@@ -45,9 +45,11 @@ func normalizeEmail(value string) string {
 }
 
 const (
-	authTypeOAuth               = "oauth"
-	authTypeServiceAccount      = "service_account"
-	authTypeOAuthServiceAccount = "oauth+service_account"
+	authTypeOAuth                     = "oauth"
+	authTypeServiceAccount            = "service_account"
+	authTypeDirectServiceAccount      = "direct_service_account"
+	authTypeOAuthServiceAccount       = "oauth+service_account"
+	authTypeOAuthDirectServiceAccount = "oauth+direct_service_account"
 )
 
 type AuthCmd struct {
@@ -707,7 +709,11 @@ func (c *AuthStatusCmd) Run(ctx context.Context, flags *RootFlags) error {
 				serviceAccountPath = p
 			}
 			if serviceAccountConfigured {
-				authPreferred = authTypeServiceAccount
+				if isDirectOnlyServiceAccount(normalizeEmail(account)) {
+					authPreferred = authTypeDirectServiceAccount
+				} else {
+					authPreferred = authTypeServiceAccount
+				}
 			} else {
 				authPreferred = authTypeOAuth
 			}
@@ -839,10 +845,18 @@ func (c *AuthListCmd) Run(ctx context.Context) error {
 		for _, e := range entries {
 			auth := authTypeOAuth
 			if e.SA {
-				auth = authTypeServiceAccount
+				if isDirectOnlyServiceAccount(normalizeEmail(e.Email)) {
+					auth = authTypeDirectServiceAccount
+				} else {
+					auth = authTypeServiceAccount
+				}
 			}
 			if e.Token != nil && e.SA {
-				auth = authTypeOAuthServiceAccount
+				if isDirectOnlyServiceAccount(normalizeEmail(e.Email)) {
+					auth = authTypeOAuthDirectServiceAccount
+				} else {
+					auth = authTypeOAuthServiceAccount
+				}
 			}
 
 			created := ""
@@ -900,10 +914,18 @@ func (c *AuthListCmd) Run(ctx context.Context) error {
 	for _, e := range entries {
 		auth := authTypeOAuth
 		if e.SA {
-			auth = authTypeServiceAccount
+			if isDirectOnlyServiceAccount(normalizeEmail(e.Email)) {
+				auth = authTypeDirectServiceAccount
+			} else {
+				auth = authTypeServiceAccount
+			}
 		}
 		if e.Token != nil && e.SA {
-			auth = authTypeOAuthServiceAccount
+			if isDirectOnlyServiceAccount(normalizeEmail(e.Email)) {
+				auth = authTypeOAuthDirectServiceAccount
+			} else {
+				auth = authTypeOAuthServiceAccount
+			}
 		}
 
 		client := ""
@@ -952,6 +974,11 @@ func bestServiceAccountPathAndMtime(email string) (string, time.Time, bool) {
 			return p, st.ModTime(), true
 		}
 	}
+	if p, err := config.DirectServiceAccountPath(email); err == nil {
+		if st, err := os.Stat(p); err == nil {
+			return p, st.ModTime(), true
+		}
+	}
 	if p, err := config.KeepServiceAccountPath(email); err == nil {
 		if st, err := os.Stat(p); err == nil {
 			return p, st.ModTime(), true
@@ -963,6 +990,40 @@ func bestServiceAccountPathAndMtime(email string) (string, time.Time, bool) {
 		}
 	}
 	return "", time.Time{}, false
+}
+
+// isDirectOnlyServiceAccount returns true when the email has a direct service
+// account key but no delegation key.
+func isDirectOnlyServiceAccount(email string) bool {
+	hasDelegation := false
+	if p, err := config.ServiceAccountPath(email); err == nil {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			hasDelegation = true
+		}
+	}
+	if !hasDelegation {
+		if p, err := config.KeepServiceAccountPath(email); err == nil {
+			if st, err := os.Stat(p); err == nil && !st.IsDir() {
+				hasDelegation = true
+			}
+		}
+	}
+	if !hasDelegation {
+		if p, err := config.KeepServiceAccountLegacyPath(email); err == nil {
+			if st, err := os.Stat(p); err == nil && !st.IsDir() {
+				hasDelegation = true
+			}
+		}
+	}
+	if hasDelegation {
+		return false
+	}
+	if p, err := config.DirectServiceAccountPath(email); err == nil {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return true
+		}
+	}
+	return false
 }
 
 type AuthServicesCmd struct {

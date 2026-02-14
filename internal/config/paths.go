@@ -166,6 +166,20 @@ func ServiceAccountPath(email string) (string, error) {
 	return filepath.Join(dir, fmt.Sprintf("sa-%s.json", safeEmail)), nil
 }
 
+// DirectServiceAccountPath returns the storage path for a direct (non-impersonating)
+// service account key. Unlike ServiceAccountPath which is used for domain-wide
+// delegation, a direct service account authenticates as itself.
+func DirectServiceAccountPath(email string) (string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+
+	safeEmail := base64.RawURLEncoding.EncodeToString([]byte(strings.ToLower(strings.TrimSpace(email))))
+
+	return filepath.Join(dir, fmt.Sprintf("sa-direct-%s.json", safeEmail)), nil
+}
+
 func ListServiceAccountEmails() ([]string, error) {
 	dir, err := Dir()
 	if err != nil {
@@ -193,6 +207,11 @@ func ListServiceAccountEmails() ([]string, error) {
 		email := ""
 
 		switch {
+		case strings.HasPrefix(name, "sa-direct-") && strings.HasSuffix(name, ".json"):
+			enc := strings.TrimSuffix(strings.TrimPrefix(name, "sa-direct-"), ".json")
+			if b, err := base64.RawURLEncoding.DecodeString(enc); err == nil {
+				email = strings.TrimSpace(string(b))
+			}
 		case strings.HasPrefix(name, "sa-") && strings.HasSuffix(name, ".json"):
 			enc := strings.TrimSuffix(strings.TrimPrefix(name, "sa-"), ".json")
 			if b, err := base64.RawURLEncoding.DecodeString(enc); err == nil {

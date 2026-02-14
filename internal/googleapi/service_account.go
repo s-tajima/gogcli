@@ -17,7 +17,9 @@ var newServiceAccountTokenSource = func(ctx context.Context, keyJSON []byte, sub
 	if err != nil {
 		return nil, fmt.Errorf("parse service account: %w", err)
 	}
-	cfg.Subject = subject
+	if subject != "" {
+		cfg.Subject = subject
+	}
 
 	// Ensure token exchanges don't hang forever.
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, &http.Client{Timeout: defaultHTTPTimeout})
@@ -43,6 +45,24 @@ func tokenSourceForServiceAccountScopes(ctx context.Context, email string, scope
 
 	if !os.IsNotExist(readErr) {
 		return nil, "", false, fmt.Errorf("read service account key: %w", readErr)
+	}
+
+	// Direct service account (no impersonation / domain-wide delegation).
+	directPath, directErr := config.DirectServiceAccountPath(email)
+	if directErr == nil {
+		data, readErr := os.ReadFile(directPath) //nolint:gosec // stored in user config dir
+		if readErr == nil {
+			ts, tokenErr := newServiceAccountTokenSource(ctx, data, "", scopes)
+			if tokenErr != nil {
+				return nil, "", false, tokenErr
+			}
+
+			return ts, directPath, true, nil
+		}
+
+		if !os.IsNotExist(readErr) {
+			return nil, "", false, fmt.Errorf("read direct service account key: %w", readErr)
+		}
 	}
 
 	// Backwards compatibility: Keep used a dedicated stored service account file.

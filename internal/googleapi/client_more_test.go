@@ -260,6 +260,132 @@ func TestOptionsForAccountScopes_ServiceAccountPreferred(t *testing.T) {
 	}
 }
 
+func TestOptionsForAccountScopes_DirectServiceAccount(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg-config"))
+
+	directPath, err := config.DirectServiceAccountPath("sa@project.iam.gserviceaccount.com")
+	if err != nil {
+		t.Fatalf("DirectServiceAccountPath: %v", err)
+	}
+
+	if _, ensureErr := config.EnsureDir(); ensureErr != nil {
+		t.Fatalf("EnsureDir: %v", ensureErr)
+	}
+
+	if writeErr := os.WriteFile(directPath, []byte(`{"type":"service_account"}`), 0o600); writeErr != nil {
+		t.Fatalf("write sa: %v", writeErr)
+	}
+
+	origRead := readClientCredentials
+	origOpen := openSecretsStore
+	origSA := newServiceAccountTokenSource
+
+	t.Cleanup(func() {
+		readClientCredentials = origRead
+		openSecretsStore = origOpen
+		newServiceAccountTokenSource = origSA
+	})
+
+	readClientCredentials = func(string) (config.ClientCredentials, error) {
+		t.Fatalf("readClientCredentials should not be called")
+		return config.ClientCredentials{}, nil
+	}
+	openSecretsStore = func() (secrets.Store, error) {
+		t.Fatalf("openSecretsStore should not be called")
+		return nil, errBoom
+	}
+
+	called := false
+	newServiceAccountTokenSource = func(_ context.Context, keyJSON []byte, subject string, scopes []string) (oauth2.TokenSource, error) {
+		called = true
+
+		if subject != "" {
+			t.Fatalf("expected empty subject for direct SA, got: %q", subject)
+		}
+
+		if len(scopes) != 1 || scopes[0] != "s1" {
+			t.Fatalf("unexpected scopes: %#v", scopes)
+		}
+
+		if string(keyJSON) == "" {
+			t.Fatalf("expected keyJSON")
+		}
+
+		return oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "t"}), nil
+	}
+
+	opts, err := optionsForAccountScopes(context.Background(), "svc", "sa@project.iam.gserviceaccount.com", []string{"s1"})
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if !called {
+		t.Fatalf("expected direct service account token source used")
+	}
+
+	if len(opts) == 0 {
+		t.Fatalf("expected client options")
+	}
+}
+
+func TestOptionsForAccountScopes_DelegationPreferredOverDirect(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg-config"))
+
+	if _, ensureErr := config.EnsureDir(); ensureErr != nil {
+		t.Fatalf("EnsureDir: %v", ensureErr)
+	}
+
+	// Write both delegation and direct keys for the same email.
+	saPath, _ := config.ServiceAccountPath("a@b.com")
+	if writeErr := os.WriteFile(saPath, []byte(`{"type":"service_account"}`), 0o600); writeErr != nil {
+		t.Fatalf("write sa: %v", writeErr)
+	}
+	directPath, _ := config.DirectServiceAccountPath("a@b.com")
+	if writeErr := os.WriteFile(directPath, []byte(`{"type":"service_account"}`), 0o600); writeErr != nil {
+		t.Fatalf("write direct sa: %v", writeErr)
+	}
+
+	origRead := readClientCredentials
+	origOpen := openSecretsStore
+	origSA := newServiceAccountTokenSource
+
+	t.Cleanup(func() {
+		readClientCredentials = origRead
+		openSecretsStore = origOpen
+		newServiceAccountTokenSource = origSA
+	})
+
+	readClientCredentials = func(string) (config.ClientCredentials, error) {
+		t.Fatalf("readClientCredentials should not be called")
+		return config.ClientCredentials{}, nil
+	}
+	openSecretsStore = func() (secrets.Store, error) {
+		t.Fatalf("openSecretsStore should not be called")
+		return nil, errBoom
+	}
+
+	newServiceAccountTokenSource = func(_ context.Context, _ []byte, subject string, _ []string) (oauth2.TokenSource, error) {
+		// Delegation path should be used; subject should be the email.
+		if subject != "a@b.com" {
+			t.Fatalf("expected delegation subject a@b.com, got: %q", subject)
+		}
+		return oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "t"}), nil
+	}
+
+	opts, err := optionsForAccountScopes(context.Background(), "svc", "a@b.com", []string{"s1"})
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if len(opts) == 0 {
+		t.Fatalf("expected client options")
+	}
+}
+
 func extractHTTPClientFromOption(t *testing.T, opt any) *http.Client {
 	t.Helper()
 

@@ -13,7 +13,7 @@ import (
 )
 
 type AuthServiceAccountCmd struct {
-	Set    AuthServiceAccountSetCmd    `cmd:"" name:"set" help:"Store a service account key for impersonation"`
+	Set    AuthServiceAccountSetCmd    `cmd:"" name:"set" help:"Store a service account key for impersonation or direct access"`
 	Unset  AuthServiceAccountUnsetCmd  `cmd:"" name:"unset" help:"Remove stored service account key"`
 	Status AuthServiceAccountStatusCmd `cmd:"" name:"status" help:"Show stored service account key status"`
 }
@@ -42,7 +42,7 @@ func parseServiceAccountJSON(data []byte) (serviceAccountJSONInfo, error) {
 	return info, nil
 }
 
-func storeServiceAccountKey(impersonateEmail string, keyPath string) (string, serviceAccountJSONInfo, error) {
+func storeServiceAccountKey(email string, keyPath string, direct bool) (string, serviceAccountJSONInfo, error) {
 	keyPath = strings.TrimSpace(keyPath)
 	if keyPath == "" {
 		return "", serviceAccountJSONInfo{}, usage("empty key path")
@@ -62,7 +62,12 @@ func storeServiceAccountKey(impersonateEmail string, keyPath string) (string, se
 		return "", serviceAccountJSONInfo{}, err
 	}
 
-	destPath, err := config.ServiceAccountPath(impersonateEmail)
+	var destPath string
+	if direct {
+		destPath, err = config.DirectServiceAccountPath(email)
+	} else {
+		destPath, err = config.ServiceAccountPath(email)
+	}
 	if err != nil {
 		return "", serviceAccountJSONInfo{}, err
 	}
@@ -79,8 +84,9 @@ func storeServiceAccountKey(impersonateEmail string, keyPath string) (string, se
 }
 
 type AuthServiceAccountSetCmd struct {
-	Email string `arg:"" name:"email" help:"Email to impersonate (Workspace user email)" required:""`
-	Key   string `name:"key" required:"" help:"Path to service account JSON key file"`
+	Email  string `arg:"" name:"email" help:"Email to impersonate (Workspace user), or service account client_email with --direct" required:""`
+	Key    string `name:"key" required:"" help:"Path to service account JSON key file"`
+	Direct bool   `name:"direct" help:"Use service account directly without impersonation (no domain-wide delegation)"`
 }
 
 func (c *AuthServiceAccountSetCmd) Run(ctx context.Context) error {
@@ -91,9 +97,14 @@ func (c *AuthServiceAccountSetCmd) Run(ctx context.Context) error {
 		return usage("empty email")
 	}
 
-	destPath, info, err := storeServiceAccountKey(email, c.Key)
+	destPath, info, err := storeServiceAccountKey(email, c.Key, c.Direct)
 	if err != nil {
 		return err
+	}
+
+	mode := "delegation"
+	if c.Direct {
+		mode = "direct"
 	}
 
 	if outfmt.IsJSON(ctx) {
@@ -103,10 +114,12 @@ func (c *AuthServiceAccountSetCmd) Run(ctx context.Context) error {
 			"path":         destPath,
 			"client_email": info.ClientEmail,
 			"client_id":    info.ClientID,
+			"mode":         mode,
 		})
 	}
 	u.Out().Printf("email\t%s", email)
 	u.Out().Printf("path\t%s", destPath)
+	u.Out().Printf("mode\t%s", mode)
 	if info.ClientEmail != "" {
 		u.Out().Printf("client_email\t%s", info.ClientEmail)
 	}
@@ -118,7 +131,8 @@ func (c *AuthServiceAccountSetCmd) Run(ctx context.Context) error {
 }
 
 type AuthServiceAccountUnsetCmd struct {
-	Email string `arg:"" name:"email" help:"Email (impersonated user)" required:""`
+	Email  string `arg:"" name:"email" help:"Email (impersonated user, or service account client_email with --direct)" required:""`
+	Direct bool   `name:"direct" help:"Remove direct service account key (no impersonation)"`
 }
 
 func (c *AuthServiceAccountUnsetCmd) Run(ctx context.Context, flags *RootFlags) error {
@@ -129,11 +143,22 @@ func (c *AuthServiceAccountUnsetCmd) Run(ctx context.Context, flags *RootFlags) 
 		return usage("empty email")
 	}
 
-	if err := confirmDestructive(ctx, flags, fmt.Sprintf("remove stored service account for %s", email)); err != nil {
+	modeLabel := "delegation"
+	if c.Direct {
+		modeLabel = "direct"
+	}
+
+	if err := confirmDestructive(ctx, flags, fmt.Sprintf("remove stored %s service account for %s", modeLabel, email)); err != nil {
 		return err
 	}
 
-	path, err := config.ServiceAccountPath(email)
+	var path string
+	var err error
+	if c.Direct {
+		path, err = config.DirectServiceAccountPath(email)
+	} else {
+		path, err = config.ServiceAccountPath(email)
+	}
 	if err != nil {
 		return err
 	}
@@ -169,7 +194,8 @@ func (c *AuthServiceAccountUnsetCmd) Run(ctx context.Context, flags *RootFlags) 
 }
 
 type AuthServiceAccountStatusCmd struct {
-	Email string `arg:"" name:"email" help:"Email (impersonated user)" required:""`
+	Email  string `arg:"" name:"email" help:"Email (impersonated user, or service account client_email with --direct)" required:""`
+	Direct bool   `name:"direct" help:"Check direct service account key status"`
 }
 
 func (c *AuthServiceAccountStatusCmd) Run(ctx context.Context) error {
@@ -180,9 +206,20 @@ func (c *AuthServiceAccountStatusCmd) Run(ctx context.Context) error {
 		return usage("empty email")
 	}
 
-	path, err := config.ServiceAccountPath(email)
+	var path string
+	var err error
+	if c.Direct {
+		path, err = config.DirectServiceAccountPath(email)
+	} else {
+		path, err = config.ServiceAccountPath(email)
+	}
 	if err != nil {
 		return err
+	}
+
+	mode := "delegation"
+	if c.Direct {
+		mode = "direct"
 	}
 
 	data, err := os.ReadFile(path) //nolint:gosec // stored in user config dir
@@ -194,11 +231,13 @@ func (c *AuthServiceAccountStatusCmd) Run(ctx context.Context) error {
 					"path":    path,
 					"exists":  false,
 					"stored":  false,
+					"mode":    mode,
 					"message": "no service account configured",
 				})
 			}
 			u.Out().Printf("email\t%s", email)
 			u.Out().Printf("path\t%s", path)
+			u.Out().Printf("mode\t%s", mode)
 			u.Out().Printf("exists\tfalse")
 			return nil
 		}
@@ -216,12 +255,14 @@ func (c *AuthServiceAccountStatusCmd) Run(ctx context.Context) error {
 			"path":         path,
 			"exists":       true,
 			"stored":       true,
+			"mode":         mode,
 			"client_email": info.ClientEmail,
 			"client_id":    info.ClientID,
 		})
 	}
 	u.Out().Printf("email\t%s", email)
 	u.Out().Printf("path\t%s", path)
+	u.Out().Printf("mode\t%s", mode)
 	u.Out().Printf("exists\ttrue")
 	if info.ClientEmail != "" {
 		u.Out().Printf("client_email\t%s", info.ClientEmail)
