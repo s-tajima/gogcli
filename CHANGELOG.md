@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.10.0 - 2026-02-14
+
 ### Added
 - Docs/Slides: add `docs update` markdown formatting + table insertion, plus markdown-driven slides creation and template-based slide creation. (#219) — thanks @maxceem.
 - Slides: add add-slide/list-slides/delete-slide/read-slide/update-notes/replace-slide for image decks, including --before insertion and --notes '' clear behavior. (#214) — thanks @chrismdp.
